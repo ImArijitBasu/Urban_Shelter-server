@@ -9,9 +9,7 @@ app.use(express.json());
 
 //TODO: mongoDB ------------------
 
-
-
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.tbvw1.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -20,7 +18,7 @@ const client = new MongoClient(uri, {
     version: ServerApiVersion.v1,
     strict: true,
     deprecationErrors: true,
-  }
+  },
 });
 
 async function run() {
@@ -29,21 +27,41 @@ async function run() {
     // await client.connect();
     //! database setup--------
 
-    const db = client.db('urbanshelter')
-    const apartmentCollection = db.collection('apartments');
+    const db = client.db("urbanshelter");
+    const apartmentCollection = db.collection("apartments");
+    const agreementCollection = db.collection("agreements");
 
     //!------------------
 
     //! apartments collection
-    app.get('/apartments' , async(req,res)=>{
-        const result =await apartmentCollection.find().toArray();
-        res.send(result)
-    })
+    app.get("/apartments", async (req, res) => {
+      const result = await apartmentCollection.find().toArray();
+      res.send(result);
+    });
 
+    //! agreements collection
+    app.post("/agreements", async (req, res) => {
+        const data = req.body;
+        try {
+            const existingApplication = await agreementCollection.findOne({ 
+                email: data.email, 
+            });
+            if (existingApplication) {
+                return res.status(400).json({ message: "(one user will be able to apply for one apartment" });
+            }
+            const result = await agreementCollection.insertOne(data);
+            res.status(201).json(result);
+        } catch (error) {
+            res.status(500).json({ message: "Something went wrong." });
+        }
+    });
+    
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    console.log(
+      "Pinged your deployment. You successfully connected to MongoDB!"
+    );
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
@@ -51,21 +69,7 @@ async function run() {
 }
 run().catch(console.dir);
 
-
-
-
-
-
-
-
-
-
-
-
 //TODO: mongoDB ------------------
-
-
-
 
 app.get("/", (req, res) => {
   res.send("urban shelter");

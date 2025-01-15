@@ -1,5 +1,6 @@
 const express = require("express");
 const app = express();
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 const cors = require("cors");
 const port = process.env.PORT || 5000;
@@ -33,12 +34,36 @@ async function run() {
     const userCollection = db.collection("users");
 
     //!------------------
+    //! json web token-->
+    app.post("/jwt", async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.SECRET_TOKEN, {
+        expiresIn: "1d",
+      });
+      res.send({ token });
+    });
+    //! MiddleWares
+
+    const verifyToken = (req, res, next) => {
+      if (!req.headers.authorization) {
+        return res.status(401).send({ message: "unauthorized access" });
+      }
+      const token = req.headers.authorization.split(" ")[1];
+      jwt.verify(token, process.env.SECRET_TOKEN, (err, decoded) => {
+        if (err) {
+          return res.status(401).send({ message: "unauthorized access" });
+        }
+        req.decoded = decoded;
+        next();
+      });
+    };
     //! users collection
     app.get("/users", async (req, res) => {
       const users = await userCollection.find().toArray();
       res.send(users);
     });
     app.get("/users/members", async (req, res) => {
+      console.log(req.headers);
       try {
         const members = await userCollection.find({ role: "member" }).toArray();
         if (!members.length) {
@@ -49,17 +74,17 @@ async function run() {
         res.status(500).send({ message: "Something went wrong." });
       }
     });
-    app.patch('/users/remove' , async(req,res)=>{
+    app.patch("/users/remove", async (req, res) => {
       const id = req.body;
-      const query = {_id: new ObjectId(id)};
+      const query = { _id: new ObjectId(id) };
       const updatedDoc = {
         $set: {
-          role: "user"
-        }
-      }
-      const result = await userCollection.updateOne(query, updatedDoc)
-      res.send(result)
-    })    
+          role: "user",
+        },
+      };
+      const result = await userCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
     app.get("/users/role/:email", async (req, res) => {
       const { email } = req.params;
       const user = await userCollection.findOne({ email });
@@ -70,13 +95,13 @@ async function run() {
     });
     app.patch("/users/role", async (req, res) => {
       const { email, role } = req.body;
-      const query = {email: email};
+      const query = { email: email };
       const updatedDoc = {
-        $set :{
-          role: role
-        }
-      }
-      const result = await userCollection.updateOne(query , updatedDoc);
+        $set: {
+          role: role,
+        },
+      };
+      const result = await userCollection.updateOne(query, updatedDoc);
       res.send(result);
     });
     app.post("/users", async (req, res) => {
@@ -97,10 +122,10 @@ async function run() {
     });
 
     //! agreements collection
-    app.get('/agreements' , async(req,res)=>{
+    app.get("/agreements", async (req, res) => {
       const result = await agreementCollection.find().toArray();
-      res.send(result)
-    })
+      res.send(result);
+    });
     app.post("/agreements", async (req, res) => {
       const data = req.body;
       try {
@@ -118,29 +143,37 @@ async function run() {
         res.status(500).json({ message: "Something went wrong." });
       }
     });
-    app.patch('/agreements/update', async(req,res)=>{
-      const {id , action} = req.body;
-      const agreementQuery = {_id: new ObjectId(id)};
+    app.patch("/agreements/update", async (req, res) => {
+      const { id, action } = req.body;
+      const agreementQuery = { _id: new ObjectId(id) };
       const agreementUpdate = {
         $set: {
-          status: "checked"
-        }
-      }
-      const agreementResult = await agreementCollection.updateOne(agreementQuery , agreementUpdate)
+          status: "checked",
+        },
+      };
+      const agreementResult = await agreementCollection.updateOne(
+        agreementQuery,
+        agreementUpdate
+      );
 
-      if(action === "accept"){
-        const agreement = await agreementCollection.findOne(agreementQuery)
-        const userQuery = {email : agreement.email};
+      if (action === "accept") {
+        const agreement = await agreementCollection.findOne(agreementQuery);
+        const userQuery = { email: agreement.email };
         const userUpdate = {
-          $set : {
-            role:"member",
-          }
-        }
-        const userResult = await userCollection.updateOne(userQuery , userUpdate)
+          $set: {
+            role: "member",
+          },
+        };
+        const userResult = await userCollection.updateOne(
+          userQuery,
+          userUpdate
+        );
       }
-      const deleteAgreement = await agreementCollection.deleteOne(agreementQuery)
-      res.send({message: "agreement success"})
-    })
+      const deleteAgreement = await agreementCollection.deleteOne(
+        agreementQuery
+      );
+      res.send({ message: "agreement success" });
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

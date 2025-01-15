@@ -36,12 +36,12 @@ async function run() {
     //!------------------
     //! json web token-->
     app.post("/jwt", async (req, res) => {
-      const user = req.body;
-      const token = jwt.sign(user, process.env.SECRET_TOKEN, {
-        expiresIn: "1d",
-      });
+      const user = req.body; 
+      const payload = { email: user.email};
+      const token = jwt.sign(payload, process.env.SECRET_TOKEN, { expiresIn: "1d" });
       res.send({ token });
     });
+    
     //! MiddleWares
 
     const verifyToken = (req, res, next) => {
@@ -62,7 +62,7 @@ async function run() {
       const users = await userCollection.find().toArray();
       res.send(users);
     });
-    app.get("/users/members", async (req, res) => {
+    app.get("/users/members",verifyToken, async (req, res) => {
       console.log(req.headers);
       try {
         const members = await userCollection.find({ role: "member" }).toArray();
@@ -122,7 +122,7 @@ async function run() {
     });
 
     //! agreements collection
-    app.get("/agreements", async (req, res) => {
+    app.get("/agreements", verifyToken,async (req, res) => {
       const result = await agreementCollection.find().toArray();
       res.send(result);
     });

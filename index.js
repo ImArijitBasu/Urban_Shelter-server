@@ -30,8 +30,21 @@ async function run() {
     const db = client.db("urbanshelter");
     const apartmentCollection = db.collection("apartments");
     const agreementCollection = db.collection("agreements");
+    const userCollection = db.collection("users");
+
 
     //!------------------
+//! users collection
+    app.post('/users' , async(req ,res)=>{
+      const user = req.body;
+      const query = {email : user.email};
+      const existingUser = await userCollection.findOne(query);
+      if(existingUser){
+        return res.send({message: "user already exists" , insertId: null})
+      }
+      const result = await userCollection.insertOne(user)
+      res.send(result)
+    })
 
     //! apartments collection
     app.get("/apartments", async (req, res) => {

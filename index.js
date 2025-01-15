@@ -9,7 +9,7 @@ app.use(express.json());
 
 //TODO: mongoDB ------------------
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.tbvw1.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -32,19 +32,63 @@ async function run() {
     const agreementCollection = db.collection("agreements");
     const userCollection = db.collection("users");
 
-
     //!------------------
-//! users collection
-    app.post('/users' , async(req ,res)=>{
-      const user = req.body;
-      const query = {email : user.email};
-      const existingUser = await userCollection.findOne(query);
-      if(existingUser){
-        return res.send({message: "user already exists" , insertId: null})
+    //! users collection
+    app.get("/users", async (req, res) => {
+      const users = await userCollection.find().toArray();
+      res.send(users);
+    });
+    app.get("/users/members", async (req, res) => {
+      try {
+        const members = await userCollection.find({ role: "member" }).toArray();
+        if (!members.length) {
+          return res.status(404).send({ message: "No members found" });
+        }
+        res.send(members);
+      } catch (error) {
+        res.status(500).send({ message: "Something went wrong." });
       }
-      const result = await userCollection.insertOne(user)
+    });
+    app.patch('/users/remove' , async(req,res)=>{
+      const id = req.body;
+      const query = {_id: new ObjectId(id)};
+      const updatedDoc = {
+        $set: {
+          role: "user"
+        }
+      }
+      const result = await userCollection.updateOne(query, updatedDoc)
       res.send(result)
-    })
+    })    
+    app.get("/users/role/:email", async (req, res) => {
+      const { email } = req.params;
+      const user = await userCollection.findOne({ email });
+      if (!user) {
+        return res.status(404).send({ message: "User not found" });
+      }
+      res.send({ role: user.role });
+    });
+    app.patch("/users/role", async (req, res) => {
+      const { email, role } = req.body;
+      const query = {email: email};
+      const updatedDoc = {
+        $set :{
+          role: role
+        }
+      }
+      const result = await userCollection.updateOne(query , updatedDoc);
+      res.send(result);
+    });
+    app.post("/users", async (req, res) => {
+      const user = req.body;
+      const query = { email: user.email };
+      const existingUser = await userCollection.findOne(query);
+      if (existingUser) {
+        return res.send({ message: "user already exists", insertId: null });
+      }
+      const result = await userCollection.insertOne(user);
+      res.send(result);
+    });
 
     //! apartments collection
     app.get("/apartments", async (req, res) => {
@@ -53,22 +97,50 @@ async function run() {
     });
 
     //! agreements collection
+    app.get('/agreements' , async(req,res)=>{
+      const result = await agreementCollection.find().toArray();
+      res.send(result)
+    })
     app.post("/agreements", async (req, res) => {
-        const data = req.body;
-        try {
-            const existingApplication = await agreementCollection.findOne({ 
-                email: data.email, 
-            });
-            if (existingApplication) {
-                return res.status(400).json({ message: "(one user will be able to apply for one apartment" });
-            }
-            const result = await agreementCollection.insertOne(data);
-            res.status(201).json(result);
-        } catch (error) {
-            res.status(500).json({ message: "Something went wrong." });
+      const data = req.body;
+      try {
+        const existingApplication = await agreementCollection.findOne({
+          email: data.email,
+        });
+        if (existingApplication) {
+          return res.status(400).json({
+            message: "(one user will be able to apply for one apartment",
+          });
         }
+        const result = await agreementCollection.insertOne(data);
+        res.status(201).json(result);
+      } catch (error) {
+        res.status(500).json({ message: "Something went wrong." });
+      }
     });
-    
+    app.patch('/agreements/update', async(req,res)=>{
+      const {id , action} = req.body;
+      const agreementQuery = {_id: new ObjectId(id)};
+      const agreementUpdate = {
+        $set: {
+          status: "checked"
+        }
+      }
+      const agreementResult = await agreementCollection.updateOne(agreementQuery , agreementUpdate)
+
+      if(action === "accept"){
+        const agreement = await agreementCollection.findOne(agreementQuery)
+        const userQuery = {email : agreement.email};
+        const userUpdate = {
+          $set : {
+            role:"member",
+          }
+        }
+        const userResult = await userCollection.updateOne(userQuery , userUpdate)
+      }
+      const deleteAgreement = await agreementCollection.deleteOne(agreementQuery)
+      res.send({message: "agreement success"})
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

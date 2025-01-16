@@ -33,6 +33,7 @@ async function run() {
     const agreementCollection = db.collection("agreements");
     const userCollection = db.collection("users");
     const announcementCollection = db.collection("announcements");
+    const couponCollection = db.collection('coupons');
 
     //!------------------
     //! json web token-->
@@ -184,6 +185,36 @@ async function run() {
       res.send(result);
     })
 
+
+    //! coupons collection 
+
+    app.get('/coupons' ,verifyToken, async(req,res)=>{
+      const coupons = await couponCollection.find().toArray();
+      res.send(coupons);
+    })
+    app.post('/coupons',verifyToken, async(req,res)=>{
+      const data = req.body;
+      const result = couponCollection.insertOne(data);
+      res.send(result);
+    })
+    app.delete('/coupons/:id',verifyToken,async(req,res)=>{
+      const id = req.params;
+      const query = {_id : new ObjectId(id)}
+      const result = await couponCollection.deleteOne(query)
+      res.send(result)
+    })
+    app.patch('/coupons/:id',verifyToken,async(req,res)=>{
+      const id = req.params;
+      const query = {_id : new ObjectId(id)}
+      const currentCoupon = await couponCollection.findOne(query)
+      const updatedDoc = {
+        $set:{
+          isAvailable : !currentCoupon.isAvailable,
+        }
+      }
+      const result = await couponCollection.updateOne(query , updatedDoc)
+      res.send(result)
+    })
     //TODO: REMOVE BEFORE DEPLOY =>
     //  Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

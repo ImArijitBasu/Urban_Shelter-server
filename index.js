@@ -32,6 +32,7 @@ async function run() {
     const apartmentCollection = db.collection("apartments");
     const agreementCollection = db.collection("agreements");
     const userCollection = db.collection("users");
+    const announcementCollection = db.collection("announcements");
 
     //!------------------
     //! json web token-->
@@ -172,7 +173,19 @@ async function run() {
       res.send({ message: "agreement success" });
     });
 
-    // Send a ping to confirm a successful connection
+    //! announcements collection
+    app.get('/announcements' , async(req,res) =>{
+      const result = await announcementCollection.find().toArray();
+      res.send(result)
+    })
+    app.post('/announcements' , async(req,res)=>{
+      const data = req.body;
+      const result = announcementCollection.insertOne(data);
+      res.send(result);
+    })
+
+    //TODO: REMOVE BEFORE DEPLOY =>
+    //  Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!"

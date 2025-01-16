@@ -269,6 +269,34 @@ async function run() {
       const result = await couponCollection.updateOne(query, updatedDoc);
       res.send(result);
     });
+
+    //! dashboard stats
+    app.get('/dashboard/stats' ,verifyToken, async(req,res)=>{
+      try{
+        const totalRooms = await apartmentCollection.estimatedDocumentCount();
+        const availableRooms = await apartmentCollection.countDocuments({booked:false});
+        const bookedRooms = await apartmentCollection.countDocuments({booked:true})
+        const availablePercentage = totalRooms ?( (availableRooms / totalRooms) * 100).toFixed(2) : 0;
+        const bookedPercentage = totalRooms ?( (bookedRooms / totalRooms) * 100).toFixed(2) : 0;
+
+        const totalUsers = await userCollection.estimatedDocumentCount();
+
+        const totalMembers = await userCollection.countDocuments({role:"member"})
+
+        const stats = {
+          totalRooms,
+          availablePercentage,
+          bookedPercentage,
+          totalUsers,
+          totalMembers,
+        }
+        res.send(stats);
+        
+      }catch(error){  
+        res.status(500).send({error: "Failed to Fetch Stats data"});
+      }
+    })
+
     //TODO: REMOVE BEFORE DEPLOY =>
     //  Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

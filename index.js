@@ -33,17 +33,19 @@ async function run() {
     const agreementCollection = db.collection("agreements");
     const userCollection = db.collection("users");
     const announcementCollection = db.collection("announcements");
-    const couponCollection = db.collection('coupons');
+    const couponCollection = db.collection("coupons");
 
     //!------------------
     //! json web token-->
     app.post("/jwt", async (req, res) => {
-      const user = req.body; 
-      const payload = { email: user.email};
-      const token = jwt.sign(payload, process.env.SECRET_TOKEN, { expiresIn: "1d" });
+      const user = req.body;
+      const payload = { email: user.email };
+      const token = jwt.sign(payload, process.env.SECRET_TOKEN, {
+        expiresIn: "1d",
+      });
       res.send({ token });
     });
-    
+
     //! MiddleWares
 
     const verifyToken = (req, res, next) => {
@@ -67,22 +69,24 @@ async function run() {
     app.get("/users/members", verifyToken, async (req, res) => {
       try {
         const members = await userCollection.find({ role: "member" }).toArray();
-        res.status(200).send(members); 
+        res.status(200).send(members);
       } catch (error) {
         res.status(500).send({ message: "Something went wrong." });
       }
     });
-    
+
     app.patch("/users/remove", async (req, res) => {
-      const id = req.body;
-      const query = { _id: new ObjectId(id) };
+      const {user} = req.body;
+      const query = { email: user.email };
+      const filter = {_id : new ObjectId(user._id)}
       const updatedDoc = {
         $set: {
           role: "user",
         },
       };
-      const result = await userCollection.updateOne(query, updatedDoc);
-      res.send(result);
+      const result = await userCollection.updateOne(filter, updatedDoc);
+      const agreementRemove = await agreementCollection.deleteOne(query)
+      res.send({result , agreementRemove});
     });
     app.get("/users/role/:email", async (req, res) => {
       const { email } = req.params;
@@ -119,12 +123,25 @@ async function run() {
       const result = await apartmentCollection.find().toArray();
       res.send(result);
     });
+    app.get("/apartments/:email" , async(req ,res)=>{
+      const email = req.params;
+    })
 
     //! agreements collection
-    app.get("/agreements", verifyToken,async (req, res) => {
-      const result = await agreementCollection.find().toArray();
+    app.get("/agreements", verifyToken, async (req, res) => {
+      const result = await agreementCollection
+        .find({ status: "pending" })
+        .toArray();
       res.send(result);
     });
+    app.get('/agreement/:email' , async(req,res)=>{
+      const {email} = req.params
+      const query = {email : email};
+      const agreement = await agreementCollection.find(query).toArray()
+      const filter = {status : "checked"}
+      const result = await agreementCollection.find(filter).toArray()
+      res.send(result)
+    })
     app.post("/agreements", async (req, res) => {
       const data = req.body;
       try {
@@ -143,11 +160,12 @@ async function run() {
       }
     });
     app.patch("/agreements/update", async (req, res) => {
-      const { id, action } = req.body;
+      const { id, action , acceptDate } = req.body;
       const agreementQuery = { _id: new ObjectId(id) };
       const agreementUpdate = {
         $set: {
           status: "checked",
+          acceptDate: acceptDate,
         },
       };
       const agreementResult = await agreementCollection.updateOne(
@@ -168,53 +186,55 @@ async function run() {
           userUpdate
         );
       }
-      const deleteAgreement = await agreementCollection.deleteOne(
-        agreementQuery
-      );
+      if (action === "reject") {
+        const deleteAgreement = await agreementCollection.deleteOne(
+          agreementQuery
+        );
+      }
+
       res.send({ message: "agreement success" });
     });
 
     //! announcements collection
-    app.get('/announcements' , async(req,res) =>{
+    app.get("/announcements", async (req, res) => {
       const result = await announcementCollection.find().toArray();
-      res.send(result)
-    })
-    app.post('/announcements' , async(req,res)=>{
+      res.send(result);
+    });
+    app.post("/announcements", async (req, res) => {
       const data = req.body;
       const result = announcementCollection.insertOne(data);
       res.send(result);
-    })
+    });
 
+    //! coupons collection
 
-    //! coupons collection 
-
-    app.get('/coupons' ,verifyToken, async(req,res)=>{
+    app.get("/coupons", verifyToken, async (req, res) => {
       const coupons = await couponCollection.find().toArray();
       res.send(coupons);
-    })
-    app.post('/coupons',verifyToken, async(req,res)=>{
+    });
+    app.post("/coupons", verifyToken, async (req, res) => {
       const data = req.body;
       const result = couponCollection.insertOne(data);
       res.send(result);
-    })
-    app.delete('/coupons/:id',verifyToken,async(req,res)=>{
+    });
+    app.delete("/coupons/:id", verifyToken, async (req, res) => {
       const id = req.params;
-      const query = {_id : new ObjectId(id)}
-      const result = await couponCollection.deleteOne(query)
-      res.send(result)
-    })
-    app.patch('/coupons/:id',verifyToken,async(req,res)=>{
+      const query = { _id: new ObjectId(id) };
+      const result = await couponCollection.deleteOne(query);
+      res.send(result);
+    });
+    app.patch("/coupons/:id", verifyToken, async (req, res) => {
       const id = req.params;
-      const query = {_id : new ObjectId(id)}
-      const currentCoupon = await couponCollection.findOne(query)
+      const query = { _id: new ObjectId(id) };
+      const currentCoupon = await couponCollection.findOne(query);
       const updatedDoc = {
-        $set:{
-          isAvailable : !currentCoupon.isAvailable,
-        }
-      }
-      const result = await couponCollection.updateOne(query , updatedDoc)
-      res.send(result)
-    })
+        $set: {
+          isAvailable: !currentCoupon.isAvailable,
+        },
+      };
+      const result = await couponCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
     //TODO: REMOVE BEFORE DEPLOY =>
     //  Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

@@ -76,18 +76,41 @@ async function run() {
     });
 
     app.patch("/users/remove", async (req, res) => {
-      const {user} = req.body;
-      const query = { email: user.email };
-      const filter = {_id : new ObjectId(user._id)}
-      const updatedDoc = {
+      const { user } = req.body;
+
+      const userQuery = { _id: new ObjectId(user._id) };
+      const userUpdate = {
         $set: {
           role: "user",
         },
       };
-      const result = await userCollection.updateOne(filter, updatedDoc);
-      const agreementRemove = await agreementCollection.deleteOne(query)
-      res.send({result , agreementRemove});
+    
+      //!1
+      const result = await userCollection.updateOne(userQuery, userUpdate);
+    
+      //!2
+      const agreementQuery = { email: user.email };
+      const agreement = await agreementCollection.findOne(agreementQuery);
+      const agreementRemove = await agreementCollection.deleteOne(agreementQuery);
+    //!3
+      if (agreement) {
+        const apartmentQuery = { apartmentNo: agreement.apartmentNo };
+        const apartmentUpdate = {
+          $set: {
+            booked: false,
+          },
+        };
+        const apartmentResult = await apartmentCollection.updateOne(
+          apartmentQuery,
+          apartmentUpdate
+        );
+      } else {
+        console.log("No agreements found for this user.");
+      }
+    
+      res.send({ result, agreementRemove });
     });
+    
     app.get("/users/role/:email", async (req, res) => {
       const { email } = req.params;
       const user = await userCollection.findOne({ email });
@@ -123,9 +146,9 @@ async function run() {
       const result = await apartmentCollection.find().toArray();
       res.send(result);
     });
-    app.get("/apartments/:email" , async(req ,res)=>{
+    app.get("/apartments/:email", async (req, res) => {
       const email = req.params;
-    })
+    });
 
     //! agreements collection
     app.get("/agreements", verifyToken, async (req, res) => {
@@ -134,14 +157,14 @@ async function run() {
         .toArray();
       res.send(result);
     });
-    app.get('/agreement/:email' , async(req,res)=>{
-      const {email} = req.params
-      const query = {email : email};
-      const agreement = await agreementCollection.find(query).toArray()
-      const filter = {status : "checked"}
-      const result = await agreementCollection.find(filter).toArray()
-      res.send(result)
-    })
+    app.get("/agreement/:email", async (req, res) => {
+      const { email } = req.params;
+      const query = { email: email };
+      const agreement = await agreementCollection.find(query).toArray();
+      const filter = { status: "checked", email: email };
+      const result = await agreementCollection.find(filter).toArray();
+      res.send(result);
+    });
     app.post("/agreements", async (req, res) => {
       const data = req.body;
       try {
@@ -160,7 +183,7 @@ async function run() {
       }
     });
     app.patch("/agreements/update", async (req, res) => {
-      const { id, action , acceptDate } = req.body;
+      const { id, action, acceptDate } = req.body;
       const agreementQuery = { _id: new ObjectId(id) };
       const agreementUpdate = {
         $set: {
@@ -185,6 +208,17 @@ async function run() {
           userQuery,
           userUpdate
         );
+        const apartmentQuery = { apartmentNo: agreement.apartmentNo };
+        const apartmentUpdate = {
+          $set: {
+            booked: true,
+          },
+        };
+        const bookApartment = await apartmentCollection.updateOne(
+          apartmentQuery,
+          apartmentUpdate
+        );
+
       }
       if (action === "reject") {
         const deleteAgreement = await agreementCollection.deleteOne(

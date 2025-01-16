@@ -62,18 +62,15 @@ async function run() {
       const users = await userCollection.find().toArray();
       res.send(users);
     });
-    app.get("/users/members",verifyToken, async (req, res) => {
-      console.log(req.headers);
+    app.get("/users/members", verifyToken, async (req, res) => {
       try {
         const members = await userCollection.find({ role: "member" }).toArray();
-        if (!members.length) {
-          return res.status(404).send({ message: "No members found" });
-        }
-        res.send(members);
+        res.status(200).send(members); 
       } catch (error) {
         res.status(500).send({ message: "Something went wrong." });
       }
     });
+    
     app.patch("/users/remove", async (req, res) => {
       const id = req.body;
       const query = { _id: new ObjectId(id) };

@@ -2,6 +2,7 @@ const express = require("express");
 const app = express();
 const jwt = require("jsonwebtoken");
 require("dotenv").config();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const cors = require("cors");
 const port = process.env.PORT || 5000;
 
@@ -34,6 +35,7 @@ async function run() {
     const userCollection = db.collection("users");
     const announcementCollection = db.collection("announcements");
     const couponCollection = db.collection("coupons");
+    const paymentCollection = db.collection("payments");
 
     //!------------------
     //! json web token-->
@@ -84,15 +86,17 @@ async function run() {
           role: "user",
         },
       };
-    
+
       //!1
       const result = await userCollection.updateOne(userQuery, userUpdate);
-    
+
       //!2
       const agreementQuery = { email: user.email };
       const agreement = await agreementCollection.findOne(agreementQuery);
-      const agreementRemove = await agreementCollection.deleteOne(agreementQuery);
-    //!3
+      const agreementRemove = await agreementCollection.deleteOne(
+        agreementQuery
+      );
+      //!3
       if (agreement) {
         const apartmentQuery = { apartmentNo: agreement.apartmentNo };
         const apartmentUpdate = {
@@ -107,10 +111,10 @@ async function run() {
       } else {
         console.log("No agreements found for this user.");
       }
-    
+
       res.send({ result, agreementRemove });
     });
-    
+
     app.get("/users/role/:email", async (req, res) => {
       const { email } = req.params;
       const user = await userCollection.findOne({ email });
@@ -160,11 +164,14 @@ async function run() {
     app.get("/agreement/:email", async (req, res) => {
       const { email } = req.params;
       const query = { email: email };
-      const agreement = await agreementCollection.find(query).toArray();
-      const filter = { status: "checked", email: email };
-      const result = await agreementCollection.find(filter).toArray();
-      res.send(result);
+      const agreement = await agreementCollection.findOne(query);
+      if (agreement && agreement.status === "checked") {
+        res.send(agreement);
+      } else {
+        res.send({});
+      }
     });
+    
     app.post("/agreements", async (req, res) => {
       const data = req.body;
       try {
@@ -218,7 +225,6 @@ async function run() {
           apartmentQuery,
           apartmentUpdate
         );
-
       }
       if (action === "reject") {
         const deleteAgreement = await agreementCollection.deleteOne(
@@ -270,18 +276,73 @@ async function run() {
       res.send(result);
     });
 
+    //! payments collection
+
+    app.post("/coupons/apply", async (req, res) => {
+      const { code } = req.body;
+      const query = { couponCode: code };
+     try{
+      const coupon = await couponCollection.findOne(query);
+      if (coupon) {
+        //TODO : coupon is valid ........ next ->
+        if (coupon.isAvailable) {
+          //todo checks if the coupon is available
+          //TODO send a valid response to user
+          res.send({
+            status: "success",
+            statusCode: 200,
+            message: "coupon is valid and available",
+            coupon: coupon,
+          });
+        } else {
+          //todo if not available
+          //TODO coupon isn't available
+          res.send({
+            status: "error",
+            statusCode: 400,
+            message: "Coupon is not available",
+          });
+        }
+      } else {
+        //TODO: coupon isn't valid
+        res.send({
+          status: "Not found",
+          statusCode: 404,
+          message: "invalid coupon",
+        });
+      }
+     }
+     catch(error){
+      res.send({
+        status: "error",
+        statusCode: 500,
+        message: 'something went wrong'
+      })
+     }
+    });
+
     //! dashboard stats
-    app.get('/dashboard/stats' ,verifyToken, async(req,res)=>{
-      try{
+    app.get("/dashboard/stats", verifyToken, async (req, res) => {
+      try {
         const totalRooms = await apartmentCollection.estimatedDocumentCount();
-        const availableRooms = await apartmentCollection.countDocuments({booked:false});
-        const bookedRooms = await apartmentCollection.countDocuments({booked:true})
-        const availablePercentage = totalRooms ?( (availableRooms / totalRooms) * 100).toFixed(2) : 0;
-        const bookedPercentage = totalRooms ?( (bookedRooms / totalRooms) * 100).toFixed(2) : 0;
+        const availableRooms = await apartmentCollection.countDocuments({
+          booked: false,
+        });
+        const bookedRooms = await apartmentCollection.countDocuments({
+          booked: true,
+        });
+        const availablePercentage = totalRooms
+          ? ((availableRooms / totalRooms) * 100).toFixed(2)
+          : 0;
+        const bookedPercentage = totalRooms
+          ? ((bookedRooms / totalRooms) * 100).toFixed(2)
+          : 0;
 
         const totalUsers = await userCollection.estimatedDocumentCount();
 
-        const totalMembers = await userCollection.countDocuments({role:"member"})
+        const totalMembers = await userCollection.countDocuments({
+          role: "member",
+        });
 
         const stats = {
           totalRooms,
@@ -289,14 +350,42 @@ async function run() {
           bookedPercentage,
           totalUsers,
           totalMembers,
-        }
+        };
         res.send(stats);
-        
-      }catch(error){  
-        res.status(500).send({error: "Failed to Fetch Stats data"});
+      } catch (error) {
+        res.status(500).send({ error: "Failed to Fetch Stats data" });
       }
-    })
+    });
 
+    //! stripe 
+    //payment intent
+    app.post("/create-payment-intent", async (req, res) => {
+      const { price } = req.body;
+      //! stripe calculates in paisa
+      const amount = parseInt(price * 100);
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: amount,
+        currency: "usd",
+        payment_method_types: ["card"],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+    app.get("/payments/:email" ,verifyToken, async(req,res)=>{
+      const query = {email: req.params.email};
+      if (req.params.email !== req.decoded.email) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      const result = await paymentCollection.find(query).toArray();
+      res.send(result)
+    })
+    app.post('/payments' , async(req,res)=>{
+      const payment = req.body;
+      const paymentResult =  await paymentCollection.insertOne(payment);
+      res.send({paymentResult})
+    })
     //TODO: REMOVE BEFORE DEPLOY =>
     //  Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });

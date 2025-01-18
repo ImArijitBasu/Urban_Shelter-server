@@ -150,6 +150,10 @@ async function run() {
       const result = await apartmentCollection.find().toArray();
       res.send(result);
     });
+    app.get("/bannerApartments", async (req, res) => {
+      const result = await apartmentCollection.find().sort({rent: -1}).limit(10).toArray();
+      res.send(result);
+    });
     app.get("/apartments/:email", async (req, res) => {
       const email = req.params;
     });
@@ -248,7 +252,7 @@ async function run() {
 
     //! coupons collection
 
-    app.get("/coupons", verifyToken, async (req, res) => {
+    app.get("/coupons", async (req, res) => {
       const coupons = await couponCollection.find().toArray();
       res.send(coupons);
     });

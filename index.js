@@ -153,6 +153,15 @@ async function run() {
       const result = await userCollection.insertOne(user);
       res.send(result);
     });
+    app.get("/users/admins", async (req, res) => {
+      try {
+        const admins = await userCollection.find({ role: "admin" }).toArray();
+        res.status(200).send(admins); 
+      } catch (err) {
+        res.status(500).send({ message: "Something went wrong" });
+      }
+    });
+    
 
     //! apartments collection
     app.get("/apartments", async (req, res) => {
